@@ -150,6 +150,17 @@ pub(crate) mod guard {
 /// with a pointer which we can get and set to store our data.
 pub(crate) mod key {
     cfg_select! {
+        target_os = "estros" => {
+            mod racy;
+            mod estros;
+            #[cfg(test)]
+            mod tests;
+            pub(super) use racy::LazyKey;
+            #[cfg(any(not(target_thread_local), test))]
+            pub(super) use estros::get;
+            pub(super) use estros::{Key, set};
+            use estros::{create, destroy};
+        }
         any(
             all(not(target_vendor = "apple"), not(target_family = "wasm"), target_family = "unix"),
             all(not(target_thread_local), target_vendor = "apple"),

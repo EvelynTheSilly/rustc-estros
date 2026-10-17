@@ -1,4 +1,8 @@
 cfg_select! {
+    target_os = "estros" => {
+        mod generic;
+        pub use generic::*;
+    }
     target_os = "hermit" => {
         mod hermit;
         pub use hermit::*;

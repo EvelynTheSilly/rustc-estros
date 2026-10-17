@@ -68,6 +68,10 @@ cfg_select! {
         mod unix;
         use unix as imp;
     }
+    target_os = "estros" => {
+        mod estros;
+        use estros as imp;
+    }
     target_os = "windows" => {
         mod windows;
         use windows as imp;
@@ -113,7 +117,7 @@ cfg_select! {
 pub use imp::{alloc, dealloc, realloc};
 
 cfg_select! {
-    any(target_os = "hermit", target_os = "solid_asp3", target_os = "uefi", target_os = "zkvm") => {
+    any(target_os = "hermit", target_os = "solid_asp3", target_os = "uefi", target_os = "zkvm", target_os = "estros") => {
         #[inline]
         pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
             let ptr = unsafe { alloc(layout) };

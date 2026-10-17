@@ -38,6 +38,10 @@ cfg_select! {
         mod xous;
         pub use xous::Mutex;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use estros::Mutex;
+    }
     _ => {
         mod no_threads;
         pub use no_threads::Mutex;

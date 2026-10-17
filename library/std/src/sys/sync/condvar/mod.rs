@@ -35,6 +35,10 @@ cfg_select! {
         mod xous;
         pub use xous::Condvar;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use estros::Condvar;
+    }
     _ => {
         mod no_threads;
         pub use no_threads::Condvar;

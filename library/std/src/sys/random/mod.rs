@@ -36,6 +36,10 @@ cfg_select! {
         mod espidf;
         pub use espidf::fill_bytes;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use estros::fill_bytes;
+    }
     target_os = "fuchsia" => {
         mod fuchsia;
         pub use fuchsia::fill_bytes;

@@ -60,6 +60,10 @@ cfg_select! {
         mod zkvm;
         pub use self::zkvm::*;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use self::estros::*;
+    }
     _ => {
         mod unsupported;
         pub use self::unsupported::*;

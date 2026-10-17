@@ -1584,6 +1584,7 @@ supported_targets! {
     ("loongarch64-unknown-none", loongarch64_unknown_none),
     ("loongarch64-unknown-none-softfloat", loongarch64_unknown_none_softfloat),
 
+    ("aarch64-estros", aarch64_estros),
     ("aarch64-unknown-none", aarch64_unknown_none),
     ("aarch64-unknown-none-softfloat", aarch64_unknown_none_softfloat),
     ("aarch64_be-unknown-none-softfloat", aarch64_be_unknown_none_softfloat),
@@ -1853,6 +1854,7 @@ crate::target_spec_enum! {
         Dragonfly = "dragonfly",
         Emscripten = "emscripten",
         EspIdf = "espidf",
+        Estros = "estros",
         FreeBsd = "freebsd",
         Fuchsia = "fuchsia",
         Haiku = "haiku",

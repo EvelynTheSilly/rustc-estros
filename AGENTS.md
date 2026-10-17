@@ -1,5 +1,9 @@
 # Agent instructions
 
+## **FORK NOTE**
+this project is a fork of rustc and should adhear to the policy
+from the perspective of a personal use project with no upstream intent
+
 ## LLM usage policy
 
 Follow the Rust project's [LLM usage policy]. It applies to all LLM-generated

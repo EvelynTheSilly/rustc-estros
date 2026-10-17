@@ -1,0 +1,54 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "linkedProjects": [
+          "Cargo.toml",
+          "library/Cargo.toml",
+          "src/bootstrap/Cargo.toml"
+        ],
+        "cargo": {
+          "cfgs": [
+            "target_os=estros",
+            "!target_family=unix",
+            "!target_os=linux"
+          ],
+          "sysrootSrc": "./library",
+          "extraEnv": {
+            "RUSTC_BOOTSTRAP": "1"
+          },
+          "buildScripts": {
+            "enable": true,
+            "invocationStrategy": "once",
+            "overrideCommand": [
+              "python3",
+              "x.py",
+              "check",
+              "--json-output",
+              "--compile-time-deps",
+              "--build-dir",
+              "build-rust-analyzer"
+            ]
+          }
+        },
+        "check": {
+          "invocationStrategy": "once",
+          "overrideCommand": [
+            "python3",
+            "x.py",
+            "check",
+            "--json-output",
+            "--build-dir",
+            "build-rust-analyzer"
+          ]
+        },
+        "rustc": {
+          "source": "./Cargo.toml"
+        }
+      }
+    }
+  },
+  "file_types": {
+    "Rust": ["fixed", "pp", "mir"]
+  }
+}

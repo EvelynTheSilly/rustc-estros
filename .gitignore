@@ -21,7 +21,6 @@ Session.vim
 .project
 .vim/
 .helix/
-.zed/
 .gram/
 .favorites.json
 .settings/
@@ -61,8 +60,8 @@ no_llvm_build
 /vendor
 # Created by default with `src/ci/docker/run.sh`
 /obj/
-# Created by nix dev shell / .envrc
-src/tools/nix-dev-shell/flake.lock
+# Created by `nix build`
+/result*
 
 ## ICE reports
 rustc-ice-*.txt
@@ -98,10 +97,5 @@ test-dashboard/
 ## direnv
 /.envrc
 /.direnv/
-
-## nix
-/flake.nix
-flake.lock
-/default.nix
 
 # Before adding new lines, see the comment at the top.

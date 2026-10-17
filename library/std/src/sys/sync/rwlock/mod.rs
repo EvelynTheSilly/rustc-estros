@@ -29,6 +29,10 @@ cfg_select! {
         mod solid;
         pub use solid::RwLock;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use estros::RwLock;
+    }
     _ => {
         mod no_threads;
         pub use no_threads::RwLock;

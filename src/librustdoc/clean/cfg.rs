@@ -662,6 +662,7 @@ fn human_readable_target_os(os: Symbol) -> Option<&'static str> {
         Cygwin => "Cygwin",
         Dragonfly => "DragonFly BSD",
         Emscripten => "Emscripten",
+        Estros => "estros",
         EspIdf => "ESP-IDF",
         FreeBsd => "FreeBSD",
         Fuchsia => "Fuchsia",
