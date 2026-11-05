@@ -19,6 +19,39 @@ standard library, and documentation.
 [Documentation]: https://www.rust-lang.org/learn#learn-use
 [Contributing]: CONTRIBUTING.md
 
+## Building rustc-estros
+
+Personal fork of rustc targeting `aarch64-estros` (bare-metal aarch64),
+shipped as a normal tier-2 target with std.
+
+### Nix package (hermetic, offline)
+
+    nix build .#default
+
+Stage-2 toolchain (rustc + rustdoc + std) lands in `./result`, with
+`aarch64-estros` as a regular target. Network is confined to a fixed-output
+vendoring derivation.
+
+### Dev shell (fast iteration on std)
+
+    nix develop -c ./x build --stage 1 --target aarch64-estros library
+
+Builds just std for `aarch64-estros` in the working tree (non-hermetic:
+CI LLVM + incremental). Fastest loop for editing the estros std PAL.
+
+### Check the target
+
+    ./result/bin/rustc --print target-list | grep estros
+    ls $(./result/bin/rustc --print sysroot)/lib/rustlib/aarch64-estros/lib/ | grep libstd
+
+### Compile a test binary
+
+    ./result/bin/rustc --target aarch64-estros hello.rs -o hello-estros
+    file hello-estros
+    # ELF 64-bit LSB executable, ARM aarch64, statically linked
+
+---
+
 ## Why Rust?
 
 - **Performance:** Fast and memory-efficient, suitable for critical services, embedded devices, and easily integrated with other languages.
