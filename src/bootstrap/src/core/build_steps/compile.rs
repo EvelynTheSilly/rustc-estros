@@ -658,6 +658,10 @@ pub fn std_cargo(
         features += &builder.std_features(target);
         features.push_str(compiler_builtins_c_feature);
 
+        if build_helper::targets::target_needs_builtins_mem(&target.triple) {
+            features += " compiler-builtins-mem";
+        }
+
         cargo
             .arg("--features")
             .arg(features)
