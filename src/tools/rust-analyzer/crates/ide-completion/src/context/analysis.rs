@@ -495,7 +495,7 @@ fn analyze<'db>(
 
     let Some(name_like) = find_node_at_offset(&speculative_file, speculative_offset) else {
         let analysis = if let Some(original) = ast::String::cast(original_token.clone())
-            && original_token.parent().is_none_or(|it| !ast::CfgAtom::can_cast(it.kind()))
+            && self_token.parent().is_none_or(|it| !ast::CfgAtom::can_cast(it.kind()))
         {
             CompletionAnalysis::String { original, expanded: ast::String::cast(self_token.clone()) }
         } else {
@@ -598,6 +598,7 @@ fn expected_type_and_name<'db>(
         None => return ExpectedInfo::default(),
     };
 
+    let mut refs_level = 0;
     let strip_refs = |mut ty: Type<'db>| match name_like {
         ast::NameLike::NameRef(n) => {
             let p = match n.syntax().parent() {
@@ -624,7 +625,7 @@ fn expected_type_and_name<'db>(
                 Some(it) => it,
                 None => return ty,
             };
-            let refs_level = top_syn
+            refs_level = top_syn
                 .ancestors()
                 .skip(1)
                 .map_while(Either::<ast::RefExpr, ast::PrefixExpr>::cast)
@@ -892,7 +893,7 @@ fn expected_type_and_name<'db>(
             == Some(node);
         is_direct_arg.then_some(()).and_then(|()| ty.as_callable(sema.db))
     });
-    ExpectedInfo { expected_type: ty.map(strip_refs), expected_name: name, expected_func }
+    ExpectedInfo { ty: ty.map(strip_refs), refs_level, name, func: expected_func }
 }
 
 fn classify_lifetime(

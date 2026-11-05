@@ -75,6 +75,10 @@ use crate::{BytePos, SPAN_TRACK, SpanData};
 ///   interner table, which we achieve by using `SpanDataNoCtxt`, which
 ///   minimizes the number of unique values that need to be interned.
 ///
+/// - The interned format is typically used for < 1% of all spans in
+///   incremental builds and < 0.1% of all spans in non-incremental builds.
+///   The difference is because only incremental builds use the parent field.
+///
 /// - The use of `repr(packed(4))` means `Span` has an alignment of 4 bytes,
 ///   which keeps many types that contain spans (e.g. AST nodes) smaller.
 ///   `repr(packed(1))` isn't worth it; it only shrinks a few types and
@@ -150,11 +154,12 @@ impl SpanField {
 }
 
 // Convenience structures for all span formats.
+// InlineCtxt is public to allow inline-only fast paths.
 #[derive(Clone, Copy)]
-struct InlineCtxt {
-    lo: u32,
-    len: u32,
-    ctxt: u32,
+pub(crate) struct InlineCtxt {
+    pub(crate) lo: u32,
+    pub(crate) len: u32,
+    pub(crate) ctxt: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -186,7 +191,7 @@ impl InlineCtxt {
     const LO: SpanField = Self::CTXT.below(32);
 
     #[inline]
-    const fn try_new_span(lo: u32, len: u32, ctxt: u32) -> Option<Span> {
+    pub(crate) const fn try_new_span(lo: u32, len: u32, ctxt: u32) -> Option<Span> {
         if Self::LEN.too_big(len) | Self::CTXT.too_big(ctxt) == 0 {
             Some(Span(
                 Self::PREFIX.set(Self::PREFIX_VALUE)
@@ -213,6 +218,15 @@ impl InlineCtxt {
     fn from_span(span: Span) -> InlineCtxt {
         let u = span.0;
         Self { lo: Self::LO.get(u), len: Self::LEN.get(u), ctxt: Self::CTXT.get(u) }
+    }
+
+    #[inline]
+    pub(crate) fn try_from_span(span: Span) -> Option<InlineCtxt> {
+        if Self::PREFIX.get(span.0) == Self::PREFIX_VALUE {
+            Some(Self::from_span(span))
+        } else {
+            None
+        }
     }
 }
 const _: () = InlineCtxt::LO.assert_is_bottom();
@@ -320,8 +334,13 @@ impl Interned {
 
     #[inline]
     fn data(self) -> SpanData {
-        let SpanDataNoCtxt { lo, hi, parent } =
-            with_span_interner(|interner| interner.spans[self.index as usize]);
+        #[cold]
+        #[inline(never)]
+        fn interned(index: u32) -> SpanDataNoCtxt {
+            with_span_interner(|interner| interner.spans[index as usize])
+        }
+
+        let SpanDataNoCtxt { lo, hi, parent } = interned(self.index);
         SpanData { lo, hi, ctxt: SyntaxContext::from_u32(self.ctxt), parent }
     }
 
@@ -365,10 +384,29 @@ macro_rules! match_span_kind {
 pub const DUMMY_SP: Span = InlineCtxt::try_new_span(0, 0, 0).unwrap();
 
 impl Span {
+    /// Create a new `Span`, handling the invalid case where `lo > hi` by swapping.
+    ///
+    /// If possible, ensure that `lo <= hi`, and call `Span::new_ordered` instead.
     #[inline]
     pub fn new(
         mut lo: BytePos,
         mut hi: BytePos,
+        ctxt: SyntaxContext,
+        parent: Option<LocalDefId>,
+    ) -> Self {
+        if lo > hi {
+            std::mem::swap(&mut lo, &mut hi);
+        }
+        Span::new_ordered(lo, hi, ctxt, parent)
+    }
+
+    /// Create a new `Span`.
+    ///
+    /// This requires that `lo <= hi`.
+    #[inline]
+    pub fn new_ordered(
+        lo: BytePos,
+        hi: BytePos,
         ctxt: SyntaxContext,
         parent: Option<LocalDefId>,
     ) -> Self {
@@ -382,9 +420,7 @@ impl Span {
             Interned::new_span(ctxt, index)
         }
 
-        if lo > hi {
-            std::mem::swap(&mut lo, &mut hi);
-        }
+        debug_assert!(lo <= hi);
 
         let lo32 = lo.0;
         let (len, ctxt32) = (hi.0 - lo32, ctxt.as_u32());
@@ -447,10 +483,7 @@ impl Span {
             InlineCtxt(span) => span.lo == 0 && span.len == 0,
             InlineParent(span) => span.lo == 0 && span.len == 0,
             InlinePair(span) => span.lo == 0 && span.len == 0,
-            Interned(span) => {
-                let data = with_span_interner(|interner| interner.spans[span.index as usize]);
-                data.lo == BytePos(0) && data.hi == BytePos(0)
-            },
+            Interned(span) => span.data().is_dummy(),
         }
     }
 
@@ -479,7 +512,6 @@ impl Span {
 
     /// This function is used as a fast path when decoding the full `SpanData` is not necessary.
     /// It's a cut-down version of `data_untracked` and doesn't require taking the interner lock.
-    #[cfg_attr(not(test), rustc_diagnostic_item = "SpanCtxt")]
     #[inline]
     pub fn ctxt(self) -> SyntaxContext {
         let ctxt32 = match_span_kind! {
@@ -490,17 +522,6 @@ impl Span {
             Interned(span) => span.ctxt,
         };
         SyntaxContext::from_u32(ctxt32)
-    }
-
-    // Allow `span_use_eq_ctxt` because this is `eq_ctxt`!
-    //
-    // FIXME(nnethercote): context equality used to be much more complex, but the span
-    // representation changed and now simple equality is fine. This method and the
-    // `span_use_eq_ctxt` lint and the `SpanCtxt` diagnostic item can be removed.
-    #[allow(rustc::span_use_eq_ctxt)]
-    #[inline]
-    pub fn eq_ctxt(self, other: Span) -> bool {
-        self.ctxt() == other.ctxt()
     }
 
     #[inline]
@@ -540,9 +561,7 @@ impl Span {
             InlineCtxt(_span) => None,
             InlineParent(span) => to_parent(span.parent),
             InlinePair(span) => to_parent(span.parent),
-            Interned(span) => {
-                with_span_interner(|interner| interner.spans[span.index as usize].parent)
-            },
+            Interned(span) => span.data().parent,
         }
     }
 

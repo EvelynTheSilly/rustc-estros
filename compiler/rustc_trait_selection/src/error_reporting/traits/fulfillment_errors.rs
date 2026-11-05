@@ -57,6 +57,35 @@ use crate::traits::{
 };
 
 impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
+    /// Checks for an explicit `Self: Trait` bound on an associated type impl.
+    fn is_explicit_self_trait_bound_on_impl_assoc_type(
+        &self,
+        body_def_id: LocalDefId,
+        cause_code: &ObligationCauseCode<'tcx>,
+        trait_def_id: DefId,
+    ) -> bool {
+        let ObligationCauseCode::WhereClause(item_def_id, span) = *cause_code.peel_derives() else {
+            return false;
+        };
+        // Continue only if there is an impl associated type corresponding to the expected trait item.
+        if !self.tcx.opt_associated_item(body_def_id.to_def_id()).is_some_and(|assoc_item| {
+            assoc_item.trait_item_def_id().is_some_and(|trait_item_def_id| {
+                trait_item_def_id == item_def_id
+                    && matches!(assoc_item.kind, ty::AssocKind::Type { .. })
+            })
+        }) {
+            return false;
+        }
+
+        self.tcx.clauses_of(item_def_id).instantiate_own_identity().any(|(clause, clause_span)| {
+            clause_span == span
+                && clause.skip_norm_wip().as_trait_clause().is_some_and(|trait_pred| {
+                    trait_pred.def_id() == trait_def_id
+                        && trait_pred.skip_binder().self_ty().is_self_param()
+                })
+        })
+    }
+
     /// The `root_obligation` parameter should be the `root_obligation` field
     /// from a `FulfillmentError`. If no `FulfillmentError` is available,
     /// then it should be the same as `obligation`.
@@ -105,10 +134,23 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                         .emit_err();
                 }
 
-                // Report a const-param specific error
-                if let ObligationCauseCode::ConstParam(ty) = *obligation.cause.code().peel_derives()
-                {
-                    return self.report_const_param_not_wf(ty, &obligation).emit_err();
+                // Report a `ConstParamTy`-specific error
+                match *obligation.cause.code().peel_derives() {
+                    ObligationCauseCode::ConstParam(ty) => {
+                        return self
+                            .report_const_param_ty_error(
+                                ty,
+                                self.tcx.ty_span(obligation.cause.body_def_id),
+                                &obligation,
+                            )
+                            .emit_err();
+                    }
+                    ObligationCauseCode::ConstItemTy(ty) => {
+                        return self
+                            .report_const_param_ty_error(ty, obligation.cause.span, &obligation)
+                            .emit_err();
+                    }
+                    _ => {}
                 }
 
                 let bound_predicate = obligation.predicate.kind();
@@ -174,6 +216,18 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
 
                         if let Err(guar) = leaf_trait_predicate.error_reported() {
                             return guar;
+                        }
+                        if self.is_explicit_self_trait_bound_on_impl_assoc_type(
+                            obligation.cause.body_def_id,
+                            obligation.cause.code(),
+                            leaf_trait_predicate.def_id(),
+                        ) && let ty::Param(param_ty) =
+                            *leaf_trait_predicate.skip_binder().self_ty().kind()
+                        {
+                            span = param_ty.span_from_generics(
+                                self.tcx,
+                                obligation.cause.body_def_id.to_def_id(),
+                            );
                         }
                         // Silence redundant errors on binding access that are already
                         // reported on the binding definition (#56607).
@@ -853,7 +907,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                     // Keep more precise spans that still point within the parent obligation,
                     // but do not let hidden impl details move the span outside of it.
                     if code == *root_obligation.cause.code()
-                        && root_obligation.cause.span.eq_ctxt(obligation.cause.span)
+                        && root_obligation.cause.span.ctxt() == obligation.cause.span.ctxt()
                         && !root_obligation.cause.span.contains(obligation.cause.span)
                     {
                         obligation.cause.span = root_obligation.cause.span;
@@ -1424,14 +1478,12 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
         true
     }
 
-    fn report_const_param_not_wf(
+    fn report_const_param_ty_error(
         &self,
         ty: Ty<'tcx>,
+        span: Span,
         obligation: &PredicateObligation<'tcx>,
     ) -> Diag<'a> {
-        let def_id = obligation.cause.body_def_id;
-        let span = self.tcx.ty_span(def_id);
-
         let mut file = None;
         let ty_str = self.tcx.short_string(ty, &mut file);
         let mut diag = match ty.kind() {
@@ -1878,7 +1930,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                             ..
                         }),
                     ) => Some((
-                        ty.span,
+                        ty.span.into(),
                         with_forced_trimmed_paths!(Cow::from(format!(
                             "type mismatch resolving `{}`",
                             self.tcx.short_string(
@@ -2316,9 +2368,9 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
 
                     let traits = self.cmp_traits(
                         obligation_trait_ref.def_id(),
-                        &obligation_trait_ref.trait_ref.args[1..],
+                        &obligation_trait_ref.trait_ref.args.as_slice()[1..],
                         impl_trait_ref.def_id,
-                        &impl_trait_ref.args[1..],
+                        &impl_trait_ref.args.as_slice()[1..],
                     );
                     let traits_content = (traits.0.content(), traits.1.content());
                     let types = self.cmp(obligation_trait_ref.self_ty(), impl_trait_ref.self_ty());
@@ -3194,7 +3246,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                 return true;
             }
             if let ty::Adt(def, args) = self_ty.kind()
-                && let [arg] = &args[..]
+                && let [arg] = &args.as_slice()
                 && let ty::GenericArgKind::Type(ty) = arg.kind()
                 && let ty::Adt(inner_def, _) = ty.kind()
                 && inner_def == def
@@ -4075,7 +4127,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                         } else if let ty::AliasConstKind::Anon { def_id } = alias_const.kind
                             && let Some(local_def_id) = def_id.as_local()
                             && let Some(local_body) = self.tcx.hir_maybe_body_owned_by(local_def_id)
-                            && expr_needs_parens(&local_body.value)
+                            && expr_needs_parens(local_body.value)
                         {
                             format!("[(); ({snippet}) as usize]:")
                         } else {

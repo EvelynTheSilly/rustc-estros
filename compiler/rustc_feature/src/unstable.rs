@@ -270,6 +270,8 @@ declare_features! (
     (internal, profiler_runtime, "1.18.0", None),
     /// Allows using `rustc_*` attributes (RFC 572).
     (internal, rustc_attrs, "1.0.0", None),
+    /// Allows using internal rustdoc features like `doc(keyword)`.
+    (internal, rustdoc_internals, "1.58.0", None),
     /// Allows using the `#[stable]` and `#[unstable]` attributes.
     (internal, staged_api, "1.0.0", None),
     /// Perma-unstable, only used in the test suite for binders (`for<'a>`).
@@ -299,8 +301,6 @@ declare_features! (
     /// Allows features specific to auto traits.
     /// Renamed from `optin_builtin_traits`.
     (unstable, auto_traits, "1.50.0", Some(13231)),
-    /// Allows builtin # foo() syntax
-    (internal, builtin_syntax, "1.71.0", Some(110680)),
     /// Allows `#[doc(notable_trait)]`.
     /// Renamed from `doc_spotlight`.
     (unstable, doc_notable_trait, "1.52.0", Some(45040)),
@@ -308,6 +308,8 @@ declare_features! (
     (unstable, dropck_eyepatch, "1.10.0", Some(34761)),
     /// Allows using the `#[fundamental]` attribute.
     (unstable, fundamental, "1.0.0", Some(29635)),
+    /// Allows internal syntax.
+    (internal, internal_syntax, "CURRENT_RUSTC_VERSION", Some(110680)),
     /// Allows using `#[link_name="llvm.*"]`.
     (internal, link_llvm_intrinsics, "1.0.0", Some(29602)),
     /// Allows using the `#[linkage = ".."]` attribute.
@@ -322,8 +324,6 @@ declare_features! (
     (internal, repr_simd, "1.4.0", Some(27731)),
     /// Allows using compiler's own crates.
     (unstable, rustc_private, "1.0.0", Some(27812)),
-    /// Allows using internal rustdoc features like `doc(keyword)`.
-    (internal, rustdoc_internals, "1.58.0", Some(90418)),
     /// Allows using the `rustdoc::missing_doc_code_examples` lint
     (unstable, rustdoc_missing_doc_code_examples, "1.31.0", Some(101730)),
     /// Introduces a hierarchy of `Sized` traits (RFC 3729).
@@ -429,7 +429,7 @@ declare_features! (
     (unstable, cfg_target_object_format, "1.97.0", Some(152586)),
     /// Allows `cfg(target_thread_local)`.
     (unstable, cfg_target_thread_local, "1.7.0", Some(29594)),
-    /// Allows the use of `#[cfg(ub_checks)` to check if UB checks are enabled.
+    /// Allows the use of `#[cfg(ub_checks)]` to check if UB checks are enabled.
     (unstable, cfg_ub_checks, "1.79.0", Some(123499)),
     /// Allow conditional compilation depending on rust version
     (unstable, cfg_version, "1.45.0", Some(64796)),
@@ -546,11 +546,13 @@ declare_features! (
     /// Allows using `#[align(...)]` on function items
     (unstable, fn_align, "1.53.0", Some(82232)),
     /// Support delegating implementation of functions to other already implemented functions.
-    (incomplete, fn_delegation, "1.76.0", Some(118212)),
+    (unstable, fn_delegation, "1.76.0", Some(118212)),
     /// Traits for function pointers and items
     (unstable, fn_static, "1.100.0", Some(148768)),
     /// Allows using forced keywords `k#fn`.
     (unstable, forced_keywords, "CURRENT_RUSTC_VERSION", Some(153839)),
+    /// The `Forget` autotrait.
+    (incomplete, forget_trait, "CURRENT_RUSTC_VERSION", Some(165370)),
     /// Allows impls for the Freeze trait.
     (internal, freeze_impls, "1.78.0", Some(121675)),
     /// Frontmatter `---` blocks for use by external tools.
@@ -630,6 +632,9 @@ declare_features! (
     (unstable, macro_metavar_expr, "1.61.0", Some(83527)),
     /// Provides a way to concatenate identifiers using metavariable expressions.
     (unstable, macro_metavar_expr_concat, "1.81.0", Some(124225)),
+    /// Allows explicitly marking type aliases as unchecked / opting type aliases
+    /// out of being checked even if `checked_type_aliases` is enabled or they're a TAIT.
+    (unstable, marked_unchecked_type_aliases, "CURRENT_RUSTC_VERSION", Some(112792)),
     /// Allows `#[marker]` on certain traits allowing overlapping implementations.
     (unstable, marker_trait_attr, "1.30.0", Some(29864)),
     /// Allows additional const parameter types, such as [u8; 10] or user defined types.
@@ -666,7 +671,7 @@ declare_features! (
     /// Allows providing names to parameters of `impl Fn` etc
     (unstable, named_fn_trait_parameters, "1.99.0", Some(158499)),
     /// Allows specifying the as-needed link modifier
-    (unstable, native_link_modifiers_as_needed, "1.53.0", Some(81490)),
+    (unstable, native_link_modifiers_as_needed, "1.53.0", Some(99424)),
     /// Allow negative trait implementations.
     (unstable, negative_impls, "1.44.0", Some(68318)),
     /// Allows the `!` pattern.
@@ -725,7 +730,7 @@ declare_features! (
     /// Allows the use of the `sanitize` attribute.
     (unstable, sanitize, "1.91.0", Some(39699)),
     /// Allows the use of SIMD types in functions declared in `extern` blocks.
-    (unstable, simd_ffi, "1.0.0", Some(27731)),
+    (unstable, simd_ffi, "1.0.0", Some(63068)),
     /// Target features on sparc.
     (unstable, sparc_target_feature, "1.84.0", Some(132783)),
     /// Allows specialization of implementations (RFC 1210).
@@ -770,7 +775,7 @@ declare_features! (
     (incomplete, unsafe_fields, "1.85.0", Some(132922)),
     /// Allows const generic parameters to be defined with types that
     /// are not `Sized`, e.g. `fn foo<const N: [u8]>() {`.
-    (incomplete, unsized_const_params, "1.82.0", Some(95174)),
+    (incomplete, unsized_const_params, "1.82.0", Some(128028)),
     /// Allows unsized fn parameters.
     (internal, unsized_fn_params, "1.49.0", Some(48055)),
     /// Allows using the `#[used(linker)]` (or `#[used(compiler)]`) attribute.

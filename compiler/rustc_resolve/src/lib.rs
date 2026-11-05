@@ -42,7 +42,7 @@ use rustc_ast::{
     self as ast, AngleBracketedArg, CRATE_NODE_ID, Crate, DUMMY_NODE_ID, Expr, ExprKind,
     GenericArg, GenericArgs, Generics, NodeId, Path, attr,
 };
-use rustc_attr_ir::{StrippedCfgItem, find_attr};
+use rustc_attr_ir::{LanguageItems, StrippedCfgItem, find_attr};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, default};
 use rustc_data_structures::intern::Interned;
 use rustc_data_structures::steal::Steal;
@@ -262,7 +262,10 @@ enum ResolutionError<'ra> {
     /// Error E0416: identifier is bound more than once in the same pattern.
     IdentifierBoundMoreThanOnceInSamePattern(Ident),
     /// Error E0426: use of undeclared label.
-    UndeclaredLabel { name: Symbol, suggestion: Option<LabelSuggestion> },
+    UndeclaredLabel {
+        name: Symbol,
+        suggestion: Option<LabelSuggestion>,
+    },
     /// Error E0433: failed to resolve.
     FailedToResolve {
         segment: Symbol,
@@ -273,7 +276,9 @@ enum ResolutionError<'ra> {
         message: String,
     },
     /// Error E0434: can't capture dynamic environment in a fn item.
-    CannotCaptureDynamicEnvironmentInFnItem { suggest_closure: bool },
+    CannotCaptureDynamicEnvironmentInFnItem {
+        suggest_closure: bool,
+    },
     /// Error E0435: attempt to use a non-constant value in a constant.
     AttemptToUseNonConstantValueInConstant {
         ident: Ident,
@@ -296,7 +301,9 @@ enum ResolutionError<'ra> {
     // FIXME(generic_const_parameter_types): This should give custom output specifying it's only
     // problematic to use *forward declared* parameters when the feature is enabled.
     /// ERROR E0770: the type of const parameters must not depend on other generic parameters.
-    ParamInTyOfConstParam { name: Symbol },
+    ParamInTyOfConstParam {
+        name: Symbol,
+    },
     /// cannot use self in const param
     SelfInConstParam,
     /// generic parameters must not be used inside const evaluations.
@@ -310,11 +317,18 @@ enum ResolutionError<'ra> {
     /// generic parameters must not be used inside enum discriminants.
     ///
     /// This error is emitted even with `generic_const_exprs`.
-    ParamInEnumDiscriminant { name: Symbol, param_kind: ParamKindInEnumDiscriminant },
+    ParamInEnumDiscriminant {
+        name: Symbol,
+        param_kind: ParamKindInEnumDiscriminant,
+    },
     /// Error E0735: generic parameters with a default cannot use `Self`
     ForwardDeclaredSelf(ForwardGenericParamBanReason),
     /// Error E0767: use of unreachable label
-    UnreachableLabel { name: Symbol, definition_span: Span, suggestion: Option<LabelSuggestion> },
+    UnreachableLabel {
+        name: Symbol,
+        definition_span: Span,
+        suggestion: Option<LabelSuggestion>,
+    },
     /// Error E0323, E0324, E0325: mismatch between trait item and impl item.
     TraitImplMismatch {
         name: Ident,
@@ -339,6 +353,11 @@ enum ResolutionError<'ra> {
     LowercaseSelf,
     /// A never pattern has a binding.
     BindingInNeverPattern,
+    CannotUseInnerLocalInMoveExpr {
+        move_expr_span: Span,
+        ident: Ident,
+        scope_span: Span,
+    },
 }
 
 #[derive(Debug)]
@@ -1582,6 +1601,8 @@ pub struct Resolver<'ra, 'tcx> {
     /// Stores `#[diagnostic::on_unknown]` attributes placed on module declarations.
     on_unknown_data: FxHashMap<LocalDefId, OnUnknownData> = default::fx_hash_map(),
     features: &'tcx Features,
+
+    lang_items: LanguageItems,
 }
 
 /// This provides memory for the rest of the crate. The `'ra` lifetime that is
@@ -1726,7 +1747,7 @@ impl<'tcx> Resolver<'_, 'tcx> {
         }
 
         // A relative span's parent must be an absolute span.
-        debug_assert_eq!(span.data_untracked().parent, None);
+        debug_assert_eq!(span.parent(), None);
         let _id = self.tcx.untracked().source_span.push(span);
         debug_assert_eq!(_id, def_id);
 
@@ -1901,6 +1922,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             current_crate_outer_attr_insert_span,
             disambiguators: Default::default(),
             features: tcx.features(),
+            lang_items: LanguageItems::new(),
             ..
         };
 
@@ -1971,6 +1993,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
         let confused_type_with_std_module = self.confused_type_with_std_module;
         let paths_matching_assoc_types = self.paths_matching_assoc_types;
         let effective_visibilities = self.effective_visibilities;
+        let lang_items = self.lang_items;
 
         let stripped_cfg_items = self
             .stripped_cfg_items
@@ -2007,6 +2030,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             stripped_cfg_items,
             delegation_infos: self.delegation_infos,
             delegation_inherent_fn_map: self.delegation_inherent_fn_map,
+            lang_items,
         };
         let ast_lowering = ResolverAstLowering {
             partial_res_map: self.partial_res_map,
@@ -2100,6 +2124,8 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             self.tcx
                 .sess
                 .time("resolve_postprocess", || self.cstore_mut().postprocess(self.tcx, krate));
+
+            self.tcx.sess.time("finalize_lang_items", || self.finalize_lang_items());
         });
 
         // Don't mutate the cstore or stable crate id map from here on.
@@ -2680,6 +2706,16 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             self.record_use(ident, name_binding, Used::Other);
         }
         self.main_def = Some(MainDefinition { res, is_import, span });
+    }
+
+    fn finalize_lang_items(&mut self) {
+        // Collect lang items in other crates.
+        for &cnum in self.tcx.used_crates(()) {
+            for &(def_id, lang_item) in self.tcx.defined_lang_items(cnum).iter() {
+                late::collect_item(self.tcx, &mut self.lang_items, lang_item, def_id, None);
+            }
+        }
+        late::weak_lang_items::check_crate(self.tcx, &mut self.lang_items);
     }
 }
 

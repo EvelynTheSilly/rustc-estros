@@ -1,7 +1,9 @@
 use rustc_macros::{Decodable, Encodable, PrintAttribute, StableHash};
-use rustc_span::{Ident, Span, Symbol, sym};
+use rustc_span::{Span, Symbol, sym};
+use rustc_structures::LintName;
 
 use crate::{HashIgnoredAttrId, PrintAttribute};
+
 #[derive(Clone, Copy, Debug, StableHash, Encodable, Decodable, PrintAttribute)]
 pub enum LintCheckKind {
     Allow,
@@ -43,19 +45,7 @@ impl LintCheckKind {
 /// ```
 #[derive(Clone, Debug, StableHash, Encodable, Decodable, PrintAttribute)]
 pub struct LintCheck {
-    /// The lint's tool name, if present.
-    pub tool: Option<Ident>,
-    /// The lint's name.
-    ///
-    /// With e.g. `clippy::blah` this will be `blah`.
-    /// Any extra segments are stored in `rest`.
-    pub lint_name: Symbol,
-    /// The span of the lint name.
-    ///
-    /// For example `#[deny(foo, bar, reason = "reason")]`
-    /// produces multiple `LintCheck`s, one with a span pointing to `foo`
-    /// and another pointing to `bar`.
-    pub lint_span: Span,
+    pub lint_name: LintName,
     pub kind: LintCheckKind,
     pub reason: Option<Symbol>,
     /// Needed by `LintExpectationId` to track fulfilled expectations
@@ -66,8 +56,10 @@ pub struct LintCheck {
     /// inside one attribute are all smooshed and flattened together, so
     /// multiple `LintCheck`s can have the same `attr_span`.
     pub attr_span: Span,
-    /// Any extra segments of the lint name (not including `tool` and `lint_name`),
-    /// this should be rare and indicates misuse of the attribute as nothing supports
-    /// 3+ segment lints like `#[allow(tool::two::three)]`.
-    pub rest: Option<Box<[Symbol]>>,
+    /// The span of the entire lint name.
+    ///
+    /// #[deny(foo::bar::baz)]
+    ///        ^^^^^^^^^^^^^
+    pub lint_span: Span,
+    pub tool_span: Option<Span>,
 }

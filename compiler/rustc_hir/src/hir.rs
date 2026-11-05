@@ -1960,7 +1960,7 @@ pub struct BodyId {
 #[derive(Debug, Clone, Copy, StableHash)]
 pub struct Body<'hir> {
     pub params: &'hir [Param<'hir>],
-    pub value: Expr<'hir>,
+    pub value: &'hir Expr<'hir>,
 }
 
 impl<'hir> Body<'hir> {
@@ -2354,6 +2354,93 @@ impl Expr<'_> {
             | ExprKind::Yield(..)
             | ExprKind::Cast(..)
             | ExprKind::DropTemps(..) => false,
+        }
+    }
+
+    /// Returns true if mir building would consider this expression a constant for the purposes of
+    /// lowering `[CONST; 0]` as `[]`.
+    pub fn is_constant_for_zero_repeat(&self) -> bool {
+        // NB: This needs to be kept in sync with `rustc_mir_build::builder::expr::category::Category::of`
+
+        match self.kind {
+            ExprKind::ConstBlock(_) | ExprKind::Lit(_) => true,
+            ExprKind::Cast(inner, _) | ExprKind::Type(inner, _) => {
+                inner.is_constant_for_zero_repeat()
+            }
+
+            ExprKind::Path(qpath) => {
+                match qpath {
+                    QPath::Resolved(_, Path { res: Res::Def(def_kind, _), .. }) => match def_kind {
+                        DefKind::Const | DefKind::ConstParam | DefKind::AssocConst => true,
+
+                        DefKind::Mod
+                        | DefKind::Struct
+                        | DefKind::Union
+                        | DefKind::Enum
+                        | DefKind::Variant
+                        | DefKind::Trait
+                        | DefKind::TyAlias
+                        | DefKind::ForeignTy
+                        | DefKind::TraitAlias
+                        | DefKind::AssocTy
+                        | DefKind::TyParam
+                        | DefKind::Fn
+                        | DefKind::Static { .. }
+                        | DefKind::Ctor(..)
+                        | DefKind::AssocFn
+                        | DefKind::Macro(_)
+                        | DefKind::ExternCrate
+                        | DefKind::Use
+                        | DefKind::ForeignMod
+                        | DefKind::AnonConst
+                        | DefKind::OpaqueTy
+                        | DefKind::Field
+                        | DefKind::LifetimeParam
+                        | DefKind::GlobalAsm
+                        | DefKind::Impl { .. }
+                        | DefKind::Closure
+                        | DefKind::SyntheticCoroutineBody
+                        | DefKind::TestBinderConstraints => false,
+                    },
+
+                    // A path that resolved to something other than a definition cannot be a const
+                    QPath::Resolved(..) => false,
+
+                    // A type relative expression can only be a const
+                    QPath::TypeRelative(..) => true,
+                }
+            }
+
+            ExprKind::Array(_)
+            | ExprKind::Call(..)
+            | ExprKind::MethodCall(..)
+            | ExprKind::Use(..)
+            | ExprKind::Tup(_)
+            | ExprKind::Binary(..)
+            | ExprKind::Unary(..)
+            | ExprKind::DropTemps(_)
+            | ExprKind::Let(_)
+            | ExprKind::If(..)
+            | ExprKind::Loop(..)
+            | ExprKind::Match(..)
+            | ExprKind::Closure(_)
+            | ExprKind::Block(..)
+            | ExprKind::Assign(..)
+            | ExprKind::AssignOp(..)
+            | ExprKind::Field(..)
+            | ExprKind::Index(..)
+            | ExprKind::AddrOf(..)
+            | ExprKind::Break(..)
+            | ExprKind::Continue(_)
+            | ExprKind::Ret(_)
+            | ExprKind::Become(_)
+            | ExprKind::InlineAsm(_)
+            | ExprKind::OffsetOf(..)
+            | ExprKind::Struct(..)
+            | ExprKind::Repeat(..)
+            | ExprKind::Yield(..)
+            | ExprKind::UnsafeBinderCast(..)
+            | ExprKind::Err(_) => false,
         }
     }
 
@@ -4530,14 +4617,23 @@ impl FnHeader {
 
 #[derive(Debug, Clone, Copy, StableHash)]
 pub struct TestBinderBody<'hir> {
-    pub foralls: &'hir [TestBinderForall<'hir>],
-    pub exists: &'hir [TestBinderExists<'hir>],
-    /// Constraints to be inserted directly into constraint storage to be proven
-    pub constraints: TestBinderConstraint<'hir>,
-    /// Constraints declared using `where` syntax, used via `register_obligation`
-    pub predicates: &'hir [WherePredicate<'hir>],
+    pub span: Span,
+    pub items: &'hir [TestBinderItem<'hir>],
 }
 
+#[derive(Debug, Clone, Copy, StableHash)]
+pub enum TestBinderItem<'hir> {
+    Forall(TestBinderForall<'hir>),
+    Exists(TestBinderExists<'hir>),
+    RegionEquality {
+        lhs: &'hir Lifetime,
+        rhs: &'hir Lifetime,
+    },
+    /// Constraints to be inserted directly into constraint storage to be proven
+    Constraint(TestBinderConstraint<'hir>),
+    /// Constraints declared using `where` syntax, used via `register_obligation`
+    Predicate(WherePredicate<'hir>),
+}
 #[derive(Debug, Clone, Copy, StableHash)]
 pub struct TestBinderForall<'hir> {
     pub span: Span,
@@ -5278,7 +5374,7 @@ mod size_asserts {
     use super::*;
     // tidy-alphabetical-start
     static_assert_size!(Block<'_>, 48);
-    static_assert_size!(Body<'_>, 80);
+    static_assert_size!(Body<'_>, 24);
     static_assert_size!(Expr<'_>, 64);
     static_assert_size!(ExprKind<'_>, 48);
     static_assert_size!(FnDecl<'_>, 40);

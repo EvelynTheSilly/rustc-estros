@@ -13,7 +13,8 @@ use rustc_hir::intravisit::FnKind;
 use rustc_hir::{Body, Expr, ExprKind, HirId, MatchSource, StmtKind};
 use rustc_lint::{LateContext, LintContext as _};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::{BytePos, Ident, Pos as _, Span};
+use rustc_span::{BytePos, Pos as _, Span};
+use rustc_structures::LintName;
 use std::borrow::Cow;
 use std::fmt::Display;
 
@@ -72,7 +73,7 @@ pub(super) fn check_fn<'tcx>(cx: &LateContext<'tcx>, kind: FnKind<'tcx>, body: &
             } else {
                 RetReplacement::Empty
             };
-            check_final_expr(cx, &body.value, vec![], replacement, None);
+            check_final_expr(cx, body.value, vec![], replacement, None);
         },
         FnKind::ItemFn(..) | FnKind::Method(..) => {
             check_block_return(cx, &body.value.kind, sp, vec![]);
@@ -183,23 +184,22 @@ fn check_final_expr<'tcx>(
             // actually fulfill the expectation (clippy::#12998)
             match cx.tcx.hir_attrs(expr.hir_id) {
                 [] => {},
-                [Attribute::Parsed(AttributeKind::LintCheck(lints))] => {
+                [Attribute::Parsed(AttributeKind::LintCheck(lints))]
                     if lints.iter().any(|lint| {
                         matches!(
                             lint,
                             LintCheck {
-                                tool: Some(Ident { name: sym::clippy, .. }),
-                                lint_name: sym::needless_return | sym::style | sym::all | sym::warnings,
-                                rest: None,
+                                lint_name: LintName {
+                                    tool: Some(sym::clippy),
+                                    name: sym::needless_return | sym::style | sym::all | sym::warnings
+                                },
                                 kind: LintCheckKind::Expect,
                                 ..
                             }
                         )
-                    }) {
-                        // This is an expectation of the `needless_return` lint
-                    } else {
-                        return;
-                    }
+                    }) =>
+                {
+                    // This is an expectation of the `needless_return` lint
                 },
                 _ => return,
             }

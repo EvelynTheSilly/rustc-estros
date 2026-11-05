@@ -151,6 +151,28 @@ fn test_file() {
     } else {
         assert_eq!(err.kind(), ErrorKind::PermissionDenied);
     }
+
+    // We can get a file for stderr/stdout (but not on Windows).
+    cfg_select! {
+        unix => {
+            use std::os::fd::AsFd;
+
+            let fd = std::io::stdout().as_fd().try_clone_to_owned().unwrap();
+            let mut f = std::fs::File::from(fd);
+            f.metadata().unwrap();
+            writeln!(f, "hello stdout").unwrap();
+
+            let fd = std::io::stderr().as_fd().try_clone_to_owned().unwrap();
+            let mut f = std::fs::File::from(fd);
+            f.metadata().unwrap();
+            writeln!(f, "hello stderr").unwrap();
+        }
+        _ => {
+            // keep the output consistent.
+            println!("hello stdout");
+            eprintln!("hello stderr");
+        }
+    }
 }
 
 fn test_file_partial_reads_writes() {
@@ -230,21 +252,26 @@ fn test_seek() {
 
     let mut file = File::open(&path).unwrap();
     let mut contents = Vec::new();
+    assert_eq!(file.stream_position().unwrap(), 0);
     file.read_to_end(&mut contents).unwrap();
     assert_eq!(bytes, contents.as_slice());
+    assert_eq!(file.stream_position().unwrap(), bytes.len() as u64);
     // Test that seeking to the beginning and reading until EOF gets the text again.
     file.seek(SeekFrom::Start(0)).unwrap();
+    assert_eq!(file.stream_position().unwrap(), 0);
     let mut contents = Vec::new();
     file.read_to_end(&mut contents).unwrap();
     assert_eq!(bytes, contents.as_slice());
     // Test seeking relative to the end of the file.
     file.seek(SeekFrom::End(-1)).unwrap();
+    assert_eq!(file.stream_position().unwrap(), bytes.len().strict_sub(1) as u64);
     let mut contents = Vec::new();
     file.read_to_end(&mut contents).unwrap();
     assert_eq!(&bytes[bytes.len() - 1..], contents.as_slice());
     // Test seeking relative to the current position.
     file.seek(SeekFrom::Start(5)).unwrap();
     file.seek(SeekFrom::Current(-3)).unwrap();
+    assert_eq!(file.stream_position().unwrap(), 2);
     let mut contents = Vec::new();
     file.read_to_end(&mut contents).unwrap();
     assert_eq!(&bytes[2..], contents.as_slice());
@@ -501,22 +528,24 @@ fn test_directory() {
     let dir_1 = dir_path.join("test_dir_1");
     create_dir(&dir_1).unwrap();
     // Test that read_dir metadata calls succeed
+    let mut dir_iter = read_dir(&dir_path).unwrap();
     assert_eq!(
         BTreeMap::from([
             (OsString::from("test_file_1"), true),
             (OsString::from("test_file_2"), true),
             (OsString::from("test_dir_1"), false)
         ]),
-        read_dir(&dir_path)
-            .unwrap()
+        (&mut dir_iter)
             .map(|e| {
                 let e = e.unwrap();
                 (e.file_name(), e.metadata().unwrap().is_file())
             })
             .collect::<BTreeMap<_, _>>()
     );
+    // We can access the directory handle from this iterator.
+    let dir_handle = dir_iter.dir().unwrap();
+    drop(dir_handle.open_file("test_file_1").unwrap());
     // Deleting the directory should fail, since it is not empty.
-
     // Solaris/Illumos `rmdir` call set errno to EEXIST if directory contains
     // other entries than `.` and `..`.
     // https://docs.oracle.com/cd/E86824_01/html/E54765/rmdir-2.html
@@ -716,6 +745,9 @@ fn test_symlink() {
     assert_eq!(fs::read_link(&symlink_path).unwrap(), path);
     // Removing symbolic link should succeed.
     remove_file(&symlink_path).unwrap();
+    // And it should remove the link, not the target!
+    assert!(path.is_file());
+    assert!(!symlink_path.exists());
 
     // Relative paths are interpreted relative to the symlink.
     let dirpath = utils::prepare("miri_test_fs_link_dir");
@@ -725,14 +757,12 @@ fn test_symlink() {
     symlink_file(PathBuf::from("..").join("miri_test_fs_link_target.txt"), &symlink_path2).unwrap();
     let contents = fs::read(&symlink_path2).unwrap();
     assert_eq!(&contents, bytes);
+    remove_file(&symlink_path2).unwrap();
+
     // Also test directory symlinks as that makes a difference on Windows hosts.
     symlink_dir("miri_test_fs_link_dir", &symlink_path).unwrap();
     fs::read_dir(&symlink_path).unwrap();
-
-    // Cleanup.
-    remove_file(&path).unwrap();
-    remove_file(&symlink_path2).unwrap();
-    remove_dir(&dirpath).unwrap();
+    assert!(symlink_path.is_dir());
     // Symlinks to dirs are more like files on Linux, and more like dirs on Windows.
     if cfg!(windows) {
         let err = remove_file(&symlink_path).unwrap_err();
@@ -743,6 +773,11 @@ fn test_symlink() {
         assert_eq!(err.kind(), ErrorKind::NotADirectory);
         remove_file(&symlink_path).unwrap();
     }
+    assert!(!symlink_path.exists());
+
+    // Cleanup.
+    remove_file(&path).unwrap();
+    remove_dir(&dirpath).unwrap();
 }
 
 fn test_hard_link() {
