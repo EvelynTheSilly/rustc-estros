@@ -33,6 +33,17 @@ let
       path: type: !(type == "directory" && path == srcRoot + "/vendor");
   };
 
+  # The `library/backtrace` submodule (backtrace-rs), pinned to the same commit
+  # as the gitlink in HEAD. std compiles it inline via
+  # `#[path = "../../backtrace/src/lib.rs"]`, but nix flakes don't include
+  # submodule contents, so we fetch it here and graft it in at build time.
+  backtraceSrc = pkgs.fetchFromGitHub {
+    owner = "rust-lang";
+    repo = "backtrace-rs";
+    rev = "d902726a1dcdc1e1c66f73d1162181b5423c645b";
+    sha256 = "sha256-MMyY73c7q3bRXJqXkRT1Jz2xhCE1PPvsQNQkLv3V+Co=";
+  };
+
   # git-commit-info (sha / short_sha / commit_date) so `rustc --version` gets a
   # proper hash/date instead of falling back to a bare version string. The flake
   # source has no .git, so we synthesize it from the flake's own rev metadata.
@@ -183,6 +194,14 @@ pkgs.stdenv.mkDerivation {
     cp -a ${cargoConfig} .cargo/config.toml
     cp -a ${cargoConfigLibrary} library/.cargo/config.toml
 
+    # Graft in the backtrace submodule. It's a gitlink in HEAD and flakes don't
+    # ship submodule contents, but std compiles it inline via
+    # `#[path = "../../backtrace/src/lib.rs"]`. This keeps the build offline
+    # (backtraceSrc is its own fixed-output derivation) and the git tree clean.
+    rm -rf library/backtrace
+    cp -a ${backtraceSrc} library/backtrace
+    chmod -R u+w library/backtrace
+
     # Synthesize git-commit-info (sha / short_sha / commit_date) since the flake
     # source carries no .git directory.
     printf '%s\n%s\n%s\n' \
@@ -211,5 +230,15 @@ pkgs.stdenv.mkDerivation {
     for f in "$out"/bin/* "$out"/lib/*.so "$out"/libexec/*; do
       [ -e "$f" ] && remove-references-to -t "$NIX_BUILD_TOP" "$f" 2>/dev/null || true
     done
+
+    # Expose nixpkgs lld as `rust-lld` in the sysroot host bin dir, which is
+    # prepended to the linker child's PATH (rustc_session::get_tools_search_paths).
+    # The estros target links via `rust-lld`, but we build against the external
+    # nixpkgs LLVM (llvmPackages_21) instead of bundling llvm-tools, so the
+    # toolchain ships no rust-lld of its own. rustc passes `-flavor gnu` to lld
+    # explicitly, so pointing rust-lld at ld.lld is a drop-in replacement and
+    # keeps the target linkable without a C compiler.
+    ln -sf ${llvmPackages.lld}/bin/ld.lld \
+      "$out/lib/rustlib/${hostTriple}/bin/rust-lld"
   '';
 }
