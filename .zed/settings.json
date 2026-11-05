@@ -10,6 +10,7 @@
         "cargo": {
           "cfgs": [
             "target_os=estros",
+            "!unix",
             "!target_family=unix",
             "!target_os=linux"
           ],
