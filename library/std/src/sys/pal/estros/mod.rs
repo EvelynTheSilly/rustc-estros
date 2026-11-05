@@ -5,6 +5,6 @@ mod init;
 mod common;
 pub use common::*;
 #[stable(feature = "estros", since = "1.0.0")]
-pub mod syscalls;
-#[stable(feature = "estros", since = "1.0.0")]
 pub mod cap;
+#[stable(feature = "estros", since = "1.0.0")]
+pub mod syscalls;

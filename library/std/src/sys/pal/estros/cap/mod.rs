@@ -1,5 +1,6 @@
-use crate::sys::syscalls::{lookup_mem_cap, spawn_capability, wait_on_message_from_receiver};
 use message::Message;
+
+use crate::sys::syscalls::{lookup_mem_cap, spawn_capability, wait_on_message_from_receiver};
 
 #[stable(feature = "estros", since = "1.0.0")]
 pub mod message;

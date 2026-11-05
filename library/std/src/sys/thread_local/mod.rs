@@ -169,11 +169,11 @@ pub(crate) mod key {
             mod estros;
             #[cfg(test)]
             mod tests;
-            pub(super) use racy::LazyKey;
             #[cfg(any(not(target_thread_local), test))]
             pub(super) use estros::get;
             pub(super) use estros::{Key, set};
             use estros::{create, destroy};
+            pub(super) use racy::LazyKey;
         }
         any(
             all(not(target_vendor = "apple"), not(target_family = "wasm"), target_family = "unix"),

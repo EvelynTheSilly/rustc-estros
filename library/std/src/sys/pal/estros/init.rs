@@ -1,5 +1,6 @@
-use super::common::{abort_internal, cleanup};
 use core::arch::naked_asm;
+
+use super::common::{abort_internal, cleanup};
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

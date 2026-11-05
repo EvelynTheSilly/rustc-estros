@@ -1,8 +1,7 @@
+use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use core::sync::atomic::{AtomicU32, AtomicUsize};
+
 use crate::sys::syscalls::get_tid;
-use core::sync::atomic::{
-    AtomicU32, AtomicUsize,
-    Ordering::{Acquire, Relaxed, Release},
-};
 
 const MAX_KEYS: usize = 64;
 const TID_LIMIT: usize = 2048;

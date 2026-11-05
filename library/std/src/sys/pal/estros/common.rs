@@ -1,5 +1,6 @@
-use crate::io as std_io;
 use core::arch::asm;
+
+use crate::io as std_io;
 
 pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {}
 

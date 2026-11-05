@@ -117,7 +117,13 @@ cfg_select! {
 pub use imp::{alloc, dealloc, realloc};
 
 cfg_select! {
-    any(target_os = "hermit", target_os = "solid_asp3", target_os = "uefi", target_os = "zkvm", target_os = "estros") => {
+    any(
+        target_os = "hermit",
+        target_os = "solid_asp3",
+        target_os = "uefi",
+        target_os = "zkvm",
+        target_os = "estros"
+    ) => {
         #[inline]
         pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
             let ptr = unsafe { alloc(layout) };
