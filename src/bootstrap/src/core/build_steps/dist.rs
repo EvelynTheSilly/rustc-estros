@@ -676,11 +676,15 @@ impl CommandLineStep for Rustc {
 
             generate_target_spec_json_schema(builder, image);
 
-            // HTML copyright files
-            let file_list = builder.ensure(super::run::GenerateCopyright);
-            for file in file_list {
-                builder.install(&file, &image.join("share/doc/rust"), FileType::Regular);
-            }
+            // Fork: skip HTML copyright files. `GenerateCopyright` requires a
+            // full multi-workspace vendor plus every submodule (cargo,
+            // rustc-perf, ...), which this hermetic build does not provide;
+            // the COPYRIGHT.html output is irrelevant for a bare-metal
+            // personal toolchain.
+            // let file_list = builder.ensure(super::run::GenerateCopyright);
+            // for file in file_list {
+            //     builder.install(&file, &image.join("share/doc/rust"), FileType::Regular);
+            // }
 
             // README
             builder.install(
