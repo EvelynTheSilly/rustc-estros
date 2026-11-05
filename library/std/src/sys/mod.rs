@@ -29,8 +29,9 @@ pub mod thread;
 pub mod thread_local;
 pub mod time;
 
-// FIXME(117276): remove this, move feature implementations into individual
-//                submodules.
+/// FIXME(117276): remove this, move feature implementations into individual
+///                submodules.
+#[stable(feature = "estros", since = "1.0.0")]
 pub use pal::*;
 
 /// A trait for viewing representations from std types.

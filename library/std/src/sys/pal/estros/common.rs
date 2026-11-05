@@ -1,4 +1,5 @@
 use crate::io as std_io;
+use core::arch::asm;
 
 pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {}
 
@@ -13,5 +14,5 @@ pub fn unsupported_err() -> std_io::Error {
 }
 
 pub fn abort_internal() -> ! {
-    asm!("svc #2")
+    unsafe { asm!("svc #2", options(noreturn)) }
 }

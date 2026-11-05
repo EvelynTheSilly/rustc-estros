@@ -62,6 +62,7 @@ cfg_select! {
     }
     target_os = "estros" => {
         mod estros;
+        #[stable(feature = "estros", since = "1.0.0")]
         pub use self::estros::*;
     }
     _ => {

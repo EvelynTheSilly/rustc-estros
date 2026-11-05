@@ -95,6 +95,8 @@ pub mod dragonfly;
 pub mod emscripten;
 #[cfg(target_os = "espidf")]
 pub mod espidf;
+#[cfg(target_os = "estros")]
+pub mod estros;
 #[cfg(all(target_vendor = "fortanix", target_env = "sgx"))]
 pub mod fortanix_sgx;
 #[cfg(target_os = "freebsd")]
