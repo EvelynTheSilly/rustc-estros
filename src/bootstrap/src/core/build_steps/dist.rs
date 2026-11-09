@@ -1213,9 +1213,12 @@ impl CommandLineStep for Src {
 
     /// Creates the `rust-src` installer component
     fn run(self, builder: &Builder<'_>) -> GeneratedTarball {
-        if !builder.config.dry_run() {
-            builder.require_submodule("src/llvm-project", None);
-        }
+        // estros: no llvm-project submodule graft here. Upstream ships
+        // `src/llvm-project/libunwind` inside the rust-src component for
+        // platforms that build unwind support from source; the estros
+        // targets are bare-metal `none` targets that never do, so the
+        // component is library-only to avoid pulling in the (enormous)
+        // llvm-project submodule.
 
         let tarball = Tarball::new_targetless(builder, "rust-src");
 
@@ -1233,7 +1236,7 @@ impl CommandLineStep for Src {
         copy_src_dirs(
             builder,
             &builder.src,
-            &["library", "src/llvm-project/libunwind"],
+            &["library"],
             &[
                 // not needed and contains symlinks which rustup currently
                 // chokes on when unpacking.

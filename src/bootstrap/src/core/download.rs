@@ -39,7 +39,10 @@ impl Config {
         if self.dry_run() {
             return;
         }
-        t!(fs::write(path, s));
+        // estros: include the path in the panic so sandbox permission errors
+        // point at the exact file instead of an opaque EACCES.
+        t!(fs::write(&path, s)
+            .map_err(|err| format!("failed: {:?}: {err:?}", path.as_ref())));
     }
 
     pub(crate) fn remove(&self, f: &Path) {

@@ -6,6 +6,23 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 use std::{env, fs, io, str};
 
+// estros: staged copies can originate from an immutably packaged source; a
+// hard link (or a perm-preserving copy) keeps the read-only modes, and later
+// bootstrap steps write into the staged trees (e.g. the cargo config inside
+// the rust-src staging area). Flag these copies u+w when the fs allows it.
+fn ensure_writable(dst: &Path) {
+    #[cfg(unix)]
+    if let Ok(metadata) = fs::metadata(dst) {
+        let mut perms = metadata.permissions();
+        use std::os::unix::fs::PermissionsExt;
+        let new = perms.mode() | 0o200;
+        if new != perms.mode() {
+            perms.set_mode(new);
+            let _ = fs::set_permissions(dst, perms);
+        }
+    }
+}
+
 use build_helper::ci::gha;
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 #[cfg(feature = "tracing")]
@@ -1548,11 +1565,15 @@ impl Session {
         if let Ok(()) = fs::hard_link(&src, dst) {
             // Attempt to "easy copy" by creating a hard link (symlinks are privileged on windows),
             // but if that fails just fall back to a slow `copy` operation.
+            // Hard links retain the source's (possibly read-only) modes, so
+            // flag the destination writable; allows later writes into staging.
+            ensure_writable(dst);
         } else {
             if let Err(e) = fs::copy(&src, dst) {
                 panic!("failed to copy `{}` to `{}`: {}", src.display(), dst.display(), e)
             }
             t!(fs::set_permissions(dst, metadata.permissions()));
+            ensure_writable(dst);
 
             // Restore file times because changing permissions on e.g. Linux using `chmod` can cause
             // file access time to change.

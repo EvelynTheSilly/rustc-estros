@@ -47,9 +47,14 @@
           toolchain
           ;
       };
+      fullToolchain = import ./rustc_package.nix (args // {extended = true;});
     in
     {
       devShells.${system}.default = import ./devshell.nix args;
-      packages.${system}.default = import ./rustc_package.nix args;
+      packages.${system} = {
+        default = fullToolchain;
+        full = fullToolchain;
+        rustc = import ./rustc_package.nix (args // {extended = false;});
+      };
     };
 }

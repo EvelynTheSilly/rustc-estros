@@ -9,6 +9,7 @@
 # devshell is intentionally non-hermetic (CI LLVM, incremental) while this
 # build is fully offline against a nixpkgs-provided LLVM.
 {
+  extended ? true,
   self,
   pkgs,
   lib,
@@ -19,7 +20,7 @@
 let
   hostTriple = "x86_64-unknown-linux-gnu";
   estrosTriple = "aarch64-estros";
-  llvmPackages = pkgs.llvmPackages_21;
+  llvmPackages = pkgs.llvmPackages_22;
 
   # Flake source minus the in-tree `x vendor` output. vendor/ is currently
   # staged in the git index (cleanup pending); excluding it here keeps the
@@ -81,12 +82,24 @@ let
           profiler = false;
           "optimized-compiler-builtins" = false;
           "patch-binaries-for-nix" = true;
-          extended = false;
+          extended = extended;
           target = [
             hostTriple
             estrosTriple
           ];
-        };
+          # Gated on `extended`: with `tools` set, bootstrap drops the
+          # extended-default install components (notably `rust-src`, whose
+          # dist walks the whole src tree and dies on the uninitialized
+          # llvm-project submodule, and `miri`), keeping just the real
+          # day-to-day tools. Omitted (not null) for the rustc-only build:
+          # pkgs.formats.toml doesn't accept null, and keeping the config
+          # byte-identical keeps the existing .#rustc store path/cache.
+        }
+        // (
+          if extended
+          then {tools = ["cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src"];}
+          else {}
+        );
         llvm = {
           "download-ci-llvm" = false;
           "link-shared" = true;
@@ -102,6 +115,23 @@ let
           };
         };
       };
+
+  # `cargo` is a submodule (gitlink in HEAD) — flakes don't ship submodule
+  # contents, so fetch it pinned to the gitlink commit and graft it in wherever
+  # the source is consumed (vendor FOD + bootstrap build).
+  cargoSrc = pkgs.fetchFromGitHub {
+    owner = "rust-lang";
+    repo = "cargo";
+    rev = "29c5daa1afc262323364e039bb70c83372cc702c";
+    sha256 = "sha256-SA5cXZTJ0kcx1aCKeK18LM5Yr9roQRWSIWyXCPPPlwY=";
+  };
+
+  # Graft cargo's submodule source into a (writable copy of the) src tree.
+  graftCargo = ''
+    rm -rf src/tools/cargo
+    cp -a ${cargoSrc} src/tools/cargo
+    chmod -R u+w src/tools/cargo
+  '';
 
   # Fixed-output derivation: vendor the crates.io dependencies for every
   # workspace the build actually uses (root, bootstrap, library). Fixed-output
@@ -119,7 +149,13 @@ let
 
     outputHashMode = "recursive";
     outputHashAlgo = "sha256";
-    outputHash = "sha256-SeD7EwEnICV6zGaP7yhM83ozR5BonUtL9RNfaK3x+8g=";
+    # Distinct: non-extended vendors only the three base workspaces (pin above);
+    # extended adds the tool workspaces on top, so its vendor tree differs and
+    # gets its own hash placeholder (filled in on first full-toolchain build).
+    outputHash =
+      if extended
+      then "sha256-Ii3SgA2EaYKAlhpgMzhhEjEVoeeAD9CUsmm/dL85Idc="
+      else "sha256-kbRHVaGUgYCmlcKiumYlVNEbmcMBz6RxaFpgwFrXLps=";
 
     dontConfigure = true;
     dontFixup = true;
@@ -135,18 +171,33 @@ let
       export RUSTC_BOOTSTRAP=1
       export RUSTC=${toolchain}/bin/rustc
 
+      # cargo submodule must be present before vendoring (see payload above)
+      ${graftCargo}
+
       ${toolchain}/bin/cargo vendor \
         --sync Cargo.toml \
         --sync src/bootstrap/Cargo.toml \
         --sync library/Cargo.toml \
+        ${lib.optionalString extended ''
+          --sync src/tools/cargo/Cargo.toml \
+          --sync src/tools/clippy/Cargo.toml \
+          --sync src/tools/rustfmt/Cargo.toml \
+          --sync src/tools/rust-analyzer/Cargo.toml \
+        ''} \
         "$out/vendor" > /dev/null
 
       runHook postBuild
     '';
   };
+  # Override the package name when this is the rustc-only (non-extended) build
+  # so the two variants live in distinct store paths.
+  pname =
+    if extended
+    then "rustc-estros"
+    else "rustc-estros-rustc";
 in
 pkgs.stdenv.mkDerivation {
-  pname = "rustc-estros";
+  inherit pname;
   version = channel;
   src = cleanSrc;
 
@@ -182,6 +233,11 @@ pkgs.stdenv.mkDerivation {
   buildPhase = ''
     runHook preBuild
 
+    # The unpacked source tree came out of the store with read-only modes;
+    # bootstrap copies bits of it around and writes into the copies (e.g. the
+    # cargo config inside the rust-src staging tree), so make it writable.
+    chmod -R u+w .
+
     export HOME=$TMPDIR
     export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export RUST_BOOTSTRAP_CONFIG=${bootstrapConfig}
@@ -193,6 +249,10 @@ pkgs.stdenv.mkDerivation {
     cp -a ${vendorDeps}/vendor ./vendor
     cp -a ${cargoConfig} .cargo/config.toml
     cp -a ${cargoConfigLibrary} library/.cargo/config.toml
+
+    # `cargo` is a gitlink in HEAD; graft its sources (see payload above) so
+    # bootstrap can build it. Same story as library/backtrace below.
+    ${graftCargo}
 
     # Graft in the backtrace submodule. It's a gitlink in HEAD and flakes don't
     # ship submodule contents, but std compiles it inline via
@@ -234,7 +294,7 @@ pkgs.stdenv.mkDerivation {
     # Expose nixpkgs lld as `rust-lld` in the sysroot host bin dir, which is
     # prepended to the linker child's PATH (rustc_session::get_tools_search_paths).
     # The estros target links via `rust-lld`, but we build against the external
-    # nixpkgs LLVM (llvmPackages_21) instead of bundling llvm-tools, so the
+    # nixpkgs LLVM (llvmPackages_22) instead of bundling llvm-tools, so the
     # toolchain ships no rust-lld of its own. rustc passes `-flavor gnu` to lld
     # explicitly, so pointing rust-lld at ld.lld is a drop-in replacement and
     # keeps the target linkable without a C compiler.
