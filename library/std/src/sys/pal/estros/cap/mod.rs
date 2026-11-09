@@ -1,6 +1,6 @@
 use message::Message;
 
-use crate::sys::syscalls::{lookup_mem_cap, spawn_capability, wait_on_message_from_receiver};
+use crate::sys::syscalls::{self, lookup_mem_cap, spawn_capability, wait_on_message_from_receiver};
 
 #[stable(feature = "estros", since = "1.0.0")]
 pub mod message;
@@ -8,6 +8,7 @@ pub mod message;
 /// represents an os capability to... something? ¯\_(ツ)_/¯
 /// TODO: DOCS
 #[stable(feature = "estros", since = "1.0.0")]
+#[derive(Clone)]
 pub struct Capability {
     id: u64,
 }
@@ -17,6 +18,15 @@ impl Capability {
     #[stable(feature = "estros", since = "1.0.0")]
     pub unsafe fn from_id(id: u64) -> Self {
         Capability { id }
+    }
+    /// TODO: DOCS
+    #[stable(feature = "estros", since = "1.0.0")]
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    #[stable(feature = "estros", since = "1.0.0")]
+    pub fn duplicate(&self) -> Capability {
+        unsafe { Capability::from_id(syscalls::cap_duplicate(self.id) as u64) }
     }
     /// TODO: DOCS
     #[stable(feature = "estros", since = "1.0.0")]
