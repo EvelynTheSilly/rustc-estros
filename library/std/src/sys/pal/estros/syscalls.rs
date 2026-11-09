@@ -15,6 +15,7 @@ const SYS_SPAWN_PROCESS: usize = 13;
 const SYS_CAP_DUPLICATE: usize = 14;
 const SYS_LOOKUP_MEM_CAP: usize = 15;
 const SYS_READ_MESSAGE_CAPS: usize = 16;
+const SYS_MAP_PAGE: usize = 17;
 
 /// runs a syscall
 /// example:
@@ -69,8 +70,8 @@ macro_rules! syscall_fn {
         #[inline]
         #[allow(dead_code, missing_docs)]
         #[stable(feature = "estros", since = "1.0.0")]
-        pub unsafe fn $name($($arg: $ty),*) -> usize {
-            unsafe { syscall!($nr $(, $arg)*) }
+        pub unsafe fn $name($($arg: $ty),*) -> u64 {
+            unsafe { syscall!($nr $(, $arg)*) as u64 }
         }
     };
 }
@@ -130,3 +131,4 @@ syscall_fn!(
     ptr: *mut u8,
     len: usize
 );
+syscall_fn!(map_page, SYS_MAP_PAGE, vaddr: usize, flags: u64);
