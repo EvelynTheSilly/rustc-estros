@@ -73,7 +73,7 @@ impl Capability {
     }
     /// TODO: DOCS
     #[stable(feature = "estros", since = "1.0.0")]
-    pub fn send_message(&self, data: &[u8], caps: [Capability]) -> Option<()> {
+    pub fn send_message(&self, data: &[u8], caps: Vec<Capability>) -> Option<()> {
         let res;
         unsafe {
             res = send_message_to_receiver(
@@ -84,11 +84,11 @@ impl Capability {
                 caps.len(),
             )
         };
-        if res < 0 {
+        if (res as i64) < 0 {
             // error case
             return None;
         }
-        unsafe { return Some(()) }
+        return Some(());
     }
     /// returns bytes read
     #[stable(feature = "estros", since = "1.0.0")]
