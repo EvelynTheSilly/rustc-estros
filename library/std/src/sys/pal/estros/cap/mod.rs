@@ -1,6 +1,8 @@
 use message::Message;
 
-use crate::sys::syscalls::{self, lookup_mem_cap, spawn_capability, wait_on_message_from_receiver};
+use crate::sys::syscalls::{
+    self, lookup_mem_cap, send_message_to_receiver, spawn_capability, wait_on_message_from_receiver,
+};
 
 #[stable(feature = "estros", since = "1.0.0")]
 pub mod message;
@@ -68,6 +70,25 @@ impl Capability {
             return None;
         }
         unsafe { return Some(Message::from_raw(self.id, mid as u64)) }
+    }
+    /// TODO: DOCS
+    #[stable(feature = "estros", since = "1.0.0")]
+    pub fn send_message(&self, data: &[u8], caps: [Capability]) -> Option<()> {
+        let res;
+        unsafe {
+            res = send_message_to_receiver(
+                self.id,
+                data.as_ptr(),
+                data.len(),
+                caps.as_ptr() as *const u8,
+                caps.len(),
+            )
+        };
+        if res < 0 {
+            // error case
+            return None;
+        }
+        unsafe { return Some(()) }
     }
     /// returns bytes read
     #[stable(feature = "estros", since = "1.0.0")]
