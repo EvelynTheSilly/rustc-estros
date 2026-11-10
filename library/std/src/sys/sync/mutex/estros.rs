@@ -8,16 +8,16 @@ impl Mutex {
 
     #[inline]
     pub fn lock(&self) {
-        todo!("estros mutex")
+        // No-op, very unsafe but we ball
     }
 
     #[inline]
     pub fn try_lock(&self) -> bool {
-        todo!("estros mutex")
+        true
     }
 
     #[inline]
     pub unsafe fn unlock(&self) {
-        todo!("estros mutex")
+        // No-op, very unsafe but we ball
     }
 }
