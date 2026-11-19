@@ -23,6 +23,10 @@ cfg_select! {
         mod windows;
         pub use windows::*;
     }
+    target_os = "estros" => {
+        mod estros;
+        pub use estros::*;
+    }
     target_os = "hermit" => {
         mod hermit;
         pub use hermit::*;
