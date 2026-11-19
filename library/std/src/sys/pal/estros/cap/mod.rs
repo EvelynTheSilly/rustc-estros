@@ -4,6 +4,7 @@ use crate::sys::syscalls::{
     self, lookup_mem_cap, send_message_to_receiver, spawn_capability, wait_on_message_from_receiver,
 };
 
+/// TODO: doc
 #[stable(feature = "estros", since = "1.0.0")]
 pub mod message;
 
@@ -26,6 +27,7 @@ impl Capability {
     pub fn id(&self) -> u64 {
         self.id
     }
+    /// TODO: doc
     #[stable(feature = "estros", since = "1.0.0")]
     pub fn duplicate(&self) -> Capability {
         unsafe { Capability::from_id(syscalls::cap_duplicate(self.id) as u64) }
