@@ -46,4 +46,18 @@ impl Message {
             vec
         }
     }
+    /// TODO: DOC
+    #[stable(feature = "estros", since = "1.0.0")]
+    pub fn drain(&self) -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        let mut buf = [0u8; 64];
+        loop {
+            let n = self.read_bytes(&mut buf)?;
+            out.extend_from_slice(&buf[..n]);
+            if n < 64 {
+                break;
+            }
+        }
+        Some(out)
+    }
 }
