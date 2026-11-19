@@ -1,10 +1,6 @@
 use crate::sys::{cap::Capability, syscalls};
 
-mod message_reader;
-
-#[stable(feature = "estros", since = "1.0.0")]
-pub use message_reader::MessageReader;
-
+/// TODO: doc
 #[stable(feature = "estros", since = "1.0.0")]
 pub struct Message {
     cid: u64,
