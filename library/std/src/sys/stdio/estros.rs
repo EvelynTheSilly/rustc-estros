@@ -29,11 +29,11 @@ static STDOUT_CAP: OnceLock<Option<Capability>> = OnceLock::new();
 static STDERR_CAP: OnceLock<Option<Capability>> = OnceLock::new();
 
 fn stdout() -> Option<&'static Capability> {
-    STDOUT_CAP.get_or_init(|| cap_table::get_cap_table().get("stdout").cloned()).as_ref()
+    STDOUT_CAP.get_or_init(|| cap_table::get_cap("stdout")).as_ref()
 }
 
 fn stderr() -> Option<&'static Capability> {
-    STDERR_CAP.get_or_init(|| cap_table::get_cap_table().get("stderr").cloned()).as_ref()
+    STDERR_CAP.get_or_init(|| cap_table::get_cap("stderr")).as_ref()
 }
 
 fn write(cap: Option<&Capability>, buf: &[u8]) -> io::Result<usize> {

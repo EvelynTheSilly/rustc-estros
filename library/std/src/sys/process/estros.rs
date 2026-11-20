@@ -203,11 +203,10 @@ impl Command {
         let env: Vec<(OsString, OsString)> = self.env.capture().into_iter().collect();
         caps.push(ENV, env_cap(&env)?)?;
 
-        let table = cap_table::get_cap_table();
-        if let Some(cap) = stream_cap(&self.stdout, STDOUT, table)? {
+        if let Some(cap) = stream_cap(&self.stdout, STDOUT)? {
             caps.push(STDOUT, cap)?;
         }
-        if let Some(cap) = stream_cap(&self.stderr, STDERR, table)? {
+        if let Some(cap) = stream_cap(&self.stderr, STDERR)? {
             caps.push(STDERR, cap)?;
         }
         for (name, cap) in &self.caps {
@@ -219,13 +218,9 @@ impl Command {
     }
 }
 
-fn stream_cap(
-    stdio: &Option<Stdio>,
-    name: &str,
-    table: &cap_table::CapTable,
-) -> io::Result<Option<Capability>> {
+fn stream_cap(stdio: &Option<Stdio>, name: &str) -> io::Result<Option<Capability>> {
     match stdio {
-        None | Some(Stdio::Inherit) => Ok(table.get(name).cloned()),
+        None | Some(Stdio::Inherit) => Ok(cap_table::get_cap(name)),
         Some(Stdio::Cap(cap)) => Ok(Some(cap.clone())),
         Some(Stdio::Null) | Some(Stdio::MakePipe) | Some(Stdio::Unsupported) => {
             Err(unsupported_err())

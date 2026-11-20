@@ -1,38 +1,41 @@
-//! The capability name table handed to a process at spawn.
-//!
 //! TODO: DOCS
 
 use crate::collections::HashMap;
-use crate::sync::OnceLock;
+use crate::sync::{OnceLock, RwLock};
 use crate::sys::cap::{Capability, message::Message};
 
-/// A mapping from a capability's name to the capability itself.
-///
 /// TODO: DOCS
 #[stable(feature = "estros", since = "1.0.0")]
 pub type CapTable = HashMap<String, Capability>;
 
-static CAP_TABLE: OnceLock<CapTable> = OnceLock::new();
+static CAP_TABLE: OnceLock<RwLock<CapTable>> = OnceLock::new();
 
-/// Returns the capability table for this process.
-///
-/// The table is read from capability 0 the first time this is called.
-///
-/// TODO: DOCS
-#[stable(feature = "estros", since = "1.0.0")]
-pub fn get_cap_table() -> &'static CapTable {
-    CAP_TABLE.get_or_init(load_cap_table)
+fn cap_table() -> &'static RwLock<CapTable> {
+    CAP_TABLE.get_or_init(|| RwLock::new(load_cap_table().unwrap_or_default()))
 }
 
-fn load_cap_table() -> CapTable {
-    // Capability 0 is handed to every process when it is spawned.
+fn load_cap_table() -> Option<CapTable> {
     let cap = unsafe { Capability::from_id(0) };
-    let Some(message) = cap.wait_message() else {
-        return CapTable::new();
-    };
-    // A malformed stream leaves this process without a table rather than with
-    // a partially populated one.
-    parse_stream(&message).unwrap_or_default()
+    let message = cap.wait_message()?;
+    parse_stream(&message)
+}
+
+/// TODO: DOCS
+#[stable(feature = "estros", since = "1.0.0")]
+pub fn get_cap(name: &str) -> Option<Capability> {
+    cap_table().read().unwrap().get(name).cloned()
+}
+
+/// TODO: DOCS
+#[stable(feature = "estros", since = "1.0.0")]
+pub unsafe fn cap_set(name: &str, cap: Capability) -> Option<Capability> {
+    cap_table().write().unwrap().insert(name.to_owned(), cap)
+}
+
+/// TODO: DOCS
+#[stable(feature = "estros", since = "1.0.0")]
+pub unsafe fn cap_unset(name: &str) -> Option<Capability> {
+    cap_table().write().unwrap().remove(name)
 }
 
 enum ReadU64 {
@@ -45,8 +48,6 @@ fn read_u64(message: &Message) -> ReadU64 {
     let mut buf = [0u8; 8];
     match message.read_bytes(&mut buf) {
         Some(8) => ReadU64::Value(u64::from_ne_bytes(buf)),
-        // Messages with attached capabilities outlive their data, so an empty
-        // read can also mean the end of the stream.
         Some(0) | None => ReadU64::End,
         Some(_) => ReadU64::Malformed,
     }
@@ -70,8 +71,6 @@ fn read_name(message: &Message, len: u64) -> Option<String> {
     name.is_ascii().then_some(name)
 }
 
-/// Parses `cap_id (u64), len (u64), name (len bytes)` records until the
-/// message is exhausted. Returns `None` if any record is malformed.
 fn parse_stream(message: &Message) -> Option<CapTable> {
     let mut table = CapTable::new();
     loop {
@@ -82,7 +81,6 @@ fn parse_stream(message: &Message) -> Option<CapTable> {
         };
         let len = match read_u64(message) {
             ReadU64::Value(len) => len,
-            // The message ended partway through a header.
             ReadU64::End | ReadU64::Malformed => return None,
         };
         let name = read_name(message, len)?;

@@ -37,7 +37,7 @@ impl Iterator for Env {
 }
 
 fn env_data() -> Option<Vec<u8>> {
-    let cap = cap_table::get_cap_table().get("env")?;
+    let cap = cap_table::get_cap("env")?;
     let msg = cap.wait_message()?;
     msg.drain()
 }
