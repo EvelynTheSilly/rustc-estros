@@ -1,7 +1,8 @@
 use message::Message;
 
 use crate::sys::syscalls::{
-    self, lookup_mem_cap, send_message_to_receiver, spawn_capability, wait_on_message_from_receiver,
+    self, cap_has_content, lookup_mem_cap, send_message_to_receiver, spawn_capability,
+    wait_on_message_from_receiver,
 };
 
 /// TODO: doc
@@ -92,9 +93,13 @@ impl Capability {
         }
         return Some(());
     }
-    /// returns bytes read
+    /// TODO: DOC
     #[stable(feature = "estros", since = "1.0.0")]
-    pub fn wait_stream(&self, bytes: &mut [u8]) -> usize {
-        todo!()
+    pub fn has_content(&self) -> Option<bool> {
+        match unsafe { cap_has_content(self.id) } as i64 {
+            0 => Some(true),
+            1 => Some(false),
+            _ => None,
+        }
     }
 }

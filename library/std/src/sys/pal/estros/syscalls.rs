@@ -16,6 +16,7 @@ const SYS_CAP_DUPLICATE: usize = 14;
 const SYS_LOOKUP_MEM_CAP: usize = 15;
 const SYS_READ_MESSAGE_CAPS: usize = 16;
 const SYS_MAP_PAGE: usize = 17;
+const SYS_CAP_HAS_CONTENT: usize = 18;
 
 /// runs a syscall
 /// example:
@@ -132,3 +133,4 @@ syscall_fn!(
     len: usize
 );
 syscall_fn!(map_page, SYS_MAP_PAGE, vaddr: usize, flags: u64);
+syscall_fn!(cap_has_content, SYS_CAP_HAS_CONTENT, cap_id: u64);
