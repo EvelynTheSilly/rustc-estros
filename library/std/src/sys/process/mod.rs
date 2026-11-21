@@ -15,10 +15,6 @@ cfg_select! {
         mod motor;
         use motor as imp;
     }
-    target_os = "estros" => {
-        mod estros;
-        use estros as imp;
-    }
     _ => {
         mod unsupported;
         use unsupported as imp;

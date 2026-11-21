@@ -2,7 +2,7 @@
 
 mod configure_builtins;
 mod helpers;
-mod pal;
+pub mod pal;
 mod personality;
 
 pub mod alloc;
